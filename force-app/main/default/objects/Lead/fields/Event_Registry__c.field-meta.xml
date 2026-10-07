@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Event_Registry__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The event this enquiry came from (Event Registry name).</description>
+    <label>Event Name</label>
+    <referenceTo>Event_Registry__c</referenceTo>
+    <relationshipLabel>Enquiries</relationshipLabel>
+    <relationshipName>Enquiries</relationshipName>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Lookup</type>
+</CustomField>

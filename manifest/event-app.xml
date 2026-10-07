@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+    Event Lead Management - project scope.
+    Covers the three custom objects, the custom fields added to the standard
+    objects the app hangs off, the Lightning app shell, and all code.
+    Retrieve with:  sf project retrieve start --manifest manifest/event-app.xml
+-->
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+
+    <!-- Custom objects (fields, picklists, rollups, layouts assignments) -->
+    <types>
+        <members>Event_Registry__c</members>
+        <members>Event_Attendee__c</members>
+        <members>Badge_Scan__c</members>
+        <name>CustomObject</name>
+    </types>
+
+    <!-- Custom fields on standard objects -->
+    <types>
+        <members>Contact.Enquiry_Count__c</members>
+        <members>Contact.Campaign_Count__c</members>
+        <members>Lead.Campaign__c</members>
+        <members>Lead.Contact__c</members>
+        <members>Lead.Event_Registry__c</members>
+        <members>Lead.Enquiry_Key__c</members>
+        <name>CustomField</name>
+    </types>
+
+    <!-- Lead Source "Events" value -->
+    <types>
+        <members>LeadSource</members>
+        <name>StandardValueSet</name>
+    </types>
+
+    <!-- App shell -->
+    <types>
+        <members>Event_Lead_Management</members>
+        <name>CustomApplication</name>
+    </types>
+    <types>
+        <members>Event_Registry__c</members>
+        <members>Event_Attendee__c</members>
+        <members>Badge_Scan__c</members>
+        <members>Event_Lead_Management_Home</members>
+        <name>CustomTab</name>
+    </types>
+    <types>
+        <members>Event_Lead_Management_Home</members>
+        <members>Event_Lead_Management_UtilityBar</members>
+        <members>Lead_Record_Page</members>
+        <members>Lead_Record_Page1</members>
+        <members>Lead_Record_Page2</members>
+        <name>FlexiPage</name>
+    </types>
+
+    <!-- Page layouts -->
+    <types>
+        <members>Event_Registry__c-Event Registry Layout</members>
+        <members>Event_Attendee__c-Event Attendee Layout</members>
+        <members>Badge_Scan__c-Badge Scan Layout</members>
+        <members>Lead-Lead Layout</members>
+        <members>Contact-Contact Layout</members>
+        <name>Layout</name>
+    </types>
+
+    <!-- Code -->
+    <types>
+        <members>*</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>ApexTrigger</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>*</members>
+        <name>AuraDefinitionBundle</name>
+    </types>
+
+    <!-- Badge QR images -->
+    <types>
+        <members>Attendee_QR_Codes</members>
+        <name>StaticResource</name>
+    </types>
+
+    <version>67.0</version>
+</Package>
