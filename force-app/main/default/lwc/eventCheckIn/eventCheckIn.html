@@ -1,0 +1,190 @@
+<template>
+    <lightning-card title="Event Check-In" icon-name="custom:custom63">
+
+        <!-- Header counts -->
+        <div class="slds-var-p-horizontal_medium">
+            <div class="header">
+                <div class="event">
+                    <h2>{summary.eventName}</h2>
+                    <p class="muted">{summary.campaignName}</p>
+                </div>
+                <div class="counts">
+                    <div class="stat">
+                        <span class="value arrived-value">{summary.checkedIn}</span>
+                        <span class="label">Checked in</span>
+                    </div>
+                    <div class="stat">
+                        <span class="value">{summary.notCheckedIn}</span>
+                        <span class="label">Expected</span>
+                    </div>
+                    <div class="stat">
+                        <span class="value">{summary.totalAttendees}</span>
+                        <span class="label">Total</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="track">
+                <div class="fill" style={progressStyle}></div>
+            </div>
+
+            <template if:true={eventClosed}>
+                <div class="slds-var-m-top_small">
+                    <lightning-icon icon-name="utility:warning" size="x-small" variant="warning"></lightning-icon>
+                    <span class="slds-var-m-left_x-small">
+                        This event is {summary.status}, so check-in is closed. Set it to Active to scan.
+                    </span>
+                </div>
+            </template>
+        </div>
+
+        <!-- Result banner -->
+        <template if:true={outcome}>
+            <div class="slds-var-p-horizontal_medium slds-var-p-top_small">
+                <div class={outcomeClass}>
+                    <lightning-icon icon-name={outcomeIcon} size="small"></lightning-icon>
+                    <div class="outcome-body">
+                        <p class="outcome-message">{outcome.message}</p>
+                        <template if:true={outcome.company}>
+                            <p class="muted">{outcome.title} &middot; {outcome.company}</p>
+                        </template>
+                        <template if:true={outcome.badgeId}>
+                            <p class="muted">Badge {outcome.badgeId}</p>
+                        </template>
+                    </div>
+                    <lightning-button-icon
+                        icon-name="utility:close"
+                        variant="bare"
+                        alternative-text="Dismiss"
+                        onclick={dismissOutcome}
+                    ></lightning-button-icon>
+                </div>
+            </div>
+        </template>
+
+        <lightning-tabset variant="scoped" class="slds-var-p-horizontal_medium slds-var-p-top_small">
+
+            <!-- Scan -->
+            <lightning-tab label="Scan">
+                <div class="slds-var-p-vertical_small">
+                    <template if:true={cameraAvailable}>
+                        <lightning-button
+                            variant="brand"
+                            label="Scan with camera"
+                            icon-name="utility:photo"
+                            class="slds-var-m-bottom_small full"
+                            disabled={scanDisabled}
+                            onclick={startCameraScan}
+                        ></lightning-button>
+                    </template>
+
+                    <template if:true={cameraUnavailable}>
+                        <p class="muted slds-var-m-bottom_small">
+                            Camera scanning works in the Salesforce mobile app. On this device, use a
+                            USB scanner or type a badge code below.
+                        </p>
+                    </template>
+
+                    <lightning-input
+                        data-id="badge"
+                        type="text"
+                        label="Badge code"
+                        placeholder="Scan a badge or type a code, then press Enter"
+                        disabled={scanDisabled}
+                        onkeyup={handleBadgeKey}
+                        autocomplete="off"
+                    ></lightning-input>
+
+                    <div class="slds-var-m-top_small">
+                        <lightning-button
+                            label="Check in"
+                            disabled={scanDisabled}
+                            onclick={handleBadgeSubmit}
+                        ></lightning-button>
+                    </div>
+                </div>
+            </lightning-tab>
+
+            <!-- Search -->
+            <lightning-tab label="Search">
+                <div class="slds-var-p-vertical_small">
+                    <lightning-input
+                        type="search"
+                        label="Find an attendee"
+                        placeholder="Name, email, company or badge"
+                        onchange={handleSearch}
+                    ></lightning-input>
+
+                    <lightning-input
+                        type="toggle"
+                        label="Checked in only"
+                        class="slds-var-m-top_x-small"
+                        message-toggle-active="Showing arrivals"
+                        message-toggle-inactive="Showing everyone"
+                        onchange={handleFilterToggle}
+                    ></lightning-input>
+
+                    <template if:true={hasAttendees}>
+                        <ul class="list slds-var-m-top_small">
+                            <template for:each={attendees} for:item="row">
+                                <li key={row.id} class={row.rowClass}>
+                                    <div class="person">
+                                        <span class="name">{row.personName}</span>
+                                        <span class="muted">{row.company}</span>
+                                        <span class="muted">{row.badgeId}</span>
+                                    </div>
+                                    <div class="actions">
+                                        <lightning-badge
+                                            label={row.statusLabel}
+                                            variant={row.statusVariant}
+                                        ></lightning-badge>
+                                        <lightning-button
+                                            label={row.buttonLabel}
+                                            data-badge={row.badgeId}
+                                            disabled={row.disabled}
+                                            onclick={handleRowCheckIn}
+                                        ></lightning-button>
+                                    </div>
+                                </li>
+                            </template>
+                        </ul>
+                    </template>
+
+                    <template if:false={hasAttendees}>
+                        <p class="muted slds-var-m-top_small">Nobody matches that search.</p>
+                    </template>
+                </div>
+            </lightning-tab>
+
+            <!-- Walk-in -->
+            <lightning-tab label="Walk-in">
+                <div class="slds-var-p-vertical_small">
+                    <p class="muted slds-var-m-bottom_small">
+                        For somebody who turned up without being on the guest list. They are added,
+                        then checked in.
+                    </p>
+
+                    <lightning-input data-field="firstName" label="First name" onchange={handleWalkUpChange}></lightning-input>
+                    <lightning-input data-field="lastName" label="Last name" required onchange={handleWalkUpChange}></lightning-input>
+                    <lightning-input data-field="email" type="email" label="Email" onchange={handleWalkUpChange}></lightning-input>
+                    <lightning-input data-field="phone" type="tel" label="Mobile" onchange={handleWalkUpChange}></lightning-input>
+                    <lightning-input data-field="company" label="Company" onchange={handleWalkUpChange}></lightning-input>
+                    <lightning-input data-field="title" label="Title" onchange={handleWalkUpChange}></lightning-input>
+
+                    <div class="slds-var-m-top_small">
+                        <lightning-button
+                            variant="brand"
+                            label="Register and check in"
+                            disabled={scanDisabled}
+                            onclick={handleWalkUpSubmit}
+                        ></lightning-button>
+                    </div>
+                </div>
+            </lightning-tab>
+        </lightning-tabset>
+
+        <template if:true={busy}>
+            <lightning-spinner alternative-text="Working" size="small"></lightning-spinner>
+        </template>
+    </lightning-card>
+</template>
