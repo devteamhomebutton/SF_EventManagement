@@ -191,12 +191,26 @@ public with sharing class BadgeScanService
     @AuraEnabled(cacheable=true)
     public static EventSummary getEventSummary ( Id eventRegistryId )
     {
-        Event_Registry__c registry =
+        List <Event_Registry__c> found =
             [ SELECT Id, Name, Status__c, Start_Date__c, End_Date__c,
                      Total_Attendees__c, Checked_In_Count__c, Campaign__c, Campaign__r.Name
               FROM Event_Registry__c WHERE Id = :eventRegistryId LIMIT 1 ];
 
         EventSummary summary = new EventSummary();
+
+        if ( found.isEmpty() )
+        {
+            // The Lightning App Builder previews the component without a record,
+            // so an empty summary beats a query exception in the canvas.
+            summary.totalAttendees = 0;
+            summary.checkedIn      = 0;
+            summary.notCheckedIn   = 0;
+
+            return summary;
+        }
+
+        Event_Registry__c registry = found[0];
+
         summary.eventRegistryId = registry.Id;
         summary.eventName       = registry.Name;
         summary.campaignId      = registry.Campaign__c;

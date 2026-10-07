@@ -246,6 +246,19 @@ private class BadgeScanServiceTest
             'The refused attempt should still be audited');
     }
 
+    // The App Builder renders the component with no record behind it.
+    @IsTest
+    static void summaryWithoutARecordReturnsZeros()
+    {
+        Test.startTest();
+        BadgeScanService.EventSummary summary = BadgeScanService.getEventSummary(null);
+        Test.stopTest();
+
+        Assert.areEqual(0, summary.totalAttendees, 'An unknown event should report no attendees');
+        Assert.areEqual(0, summary.checkedIn, 'An unknown event should report nobody checked in');
+        Assert.isNull(summary.eventName, 'There is no event name to report');
+    }
+
     @IsTest
     static void summaryAndSearchFeedTheScanner()
     {
