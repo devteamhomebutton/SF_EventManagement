@@ -30,6 +30,9 @@ public with sharing class BadgeScanService
     private static final Integer ENQUIRY_KEY_MAX     = 40;
     private static final Integer ATTENDEE_KEY_MAX    = 120;
 
+    /** Set by resolveContact when more than one Contact fitted. */
+    @TestVisible private static Boolean ambiguousMatch = false;
+
     /**
      * Checks a badge in. Always returns a result; never throws for a scan that
      * simply did not work, so the scanner can show the outcome and keep going.
@@ -140,6 +143,8 @@ public with sharing class BadgeScanService
     /** The shared transaction behind both a scanned badge and a walk-up. */
     private static ScanResult checkIn ( Event_Attendee__c attendee, Event_Registry__c registry, String method )
     {
+        ambiguousMatch = false;
+
         if ( attendee.Checked_In__c == true )
         {
             Badge_Scan__c repeat = logScan(attendee.Id, registry.Campaign__c, attendee.Badge_Id__c,
@@ -390,14 +395,49 @@ public with sharing class BadgeScanService
      */
     public static Contact resolveContact ( Event_Attendee__c attendee )
     {
+        ambiguousMatch = false;
+
+        List <Contact> matches = matchContacts(attendee);
+
+        if ( !matches.isEmpty() )
+        {
+            // More than one person fits. The door has to keep moving, so the
+            // first match is used and the scan is flagged for someone to check
+            // rather than blocking the queue.
+            ambiguousMatch = ( matches.size() > 1 );
+
+            Contact found = matches[0];
+
+            attachToAccount(found, attendee.Company__c);
+
+            return found;
+        }
+
+        Contact person = new Contact (
+            FirstName   = attendee.First_Name__c,
+            LastName    = blankTo(attendee.Last_Name__c, 'Unknown'),
+            Email       = attendee.Email__c,
+            MobilePhone = attendee.Phone__c,
+            Title       = attendee.Title__c,
+            AccountId   = accountFor(attendee.Company__c)
+        );
+
+        Database.insert(person, allowKnownDuplicates());
+
+        return person;
+    }
+
+    /** Email first, then mobile. Returns everything that fits, not just one. */
+    private static List<Contact> matchContacts ( Event_Attendee__c attendee )
+    {
         if ( String.isNotBlank(attendee.Email__c) )
         {
             List <Contact> byEmail =
-                [ SELECT Id FROM Contact WHERE Email = :attendee.Email__c LIMIT 1 ];
+                [ SELECT Id, AccountId FROM Contact WHERE Email = :attendee.Email__c LIMIT 5 ];
 
             if ( !byEmail.isEmpty() )
             {
-                return byEmail[0];
+                return byEmail;
             }
         }
 
@@ -409,28 +449,56 @@ public with sharing class BadgeScanService
             // difference does not hide an existing Contact.
             String tail = '%' + digits.right(9);
 
-            List <Contact> byPhone =
-                [ SELECT Id FROM Contact
-                  WHERE MobilePhone LIKE :tail OR Phone LIKE :tail
-                  LIMIT 1 ];
-
-            if ( !byPhone.isEmpty() )
-            {
-                return byPhone[0];
-            }
+            return [ SELECT Id, AccountId FROM Contact
+                     WHERE MobilePhone LIKE :tail OR Phone LIKE :tail
+                     LIMIT 5 ];
         }
 
-        Contact person = new Contact (
-            FirstName   = attendee.First_Name__c,
-            LastName    = blankTo(attendee.Last_Name__c, 'Unknown'),
-            Email       = attendee.Email__c,
-            MobilePhone = attendee.Phone__c,
-            Title       = attendee.Title__c
-        );
+        return new List<Contact> ();
+    }
 
-        Database.insert(person, allowKnownDuplicates());
+    /**
+     * Gives the person an Account so they land somewhere real in the CRM
+     * instead of floating as a private Contact. Only fills a gap - an existing
+     * Account on the Contact is never overwritten.
+     */
+    private static void attachToAccount ( Contact person, String company )
+    {
+        if ( person.AccountId != null || String.isBlank(company) )
+        {
+            return;
+        }
 
-        return person;
+        Id accountId = accountFor(company);
+
+        if ( accountId != null )
+        {
+            update new Contact ( Id = person.Id, AccountId = accountId );
+            person.AccountId = accountId;
+        }
+    }
+
+    /** Finds the company by name, creating it the first time it is seen. */
+    private static Id accountFor ( String company )
+    {
+        if ( String.isBlank(company) )
+        {
+            return null;
+        }
+
+        String name = company.trim();
+
+        List <Account> existing = [ SELECT Id FROM Account WHERE Name = :name LIMIT 1 ];
+
+        if ( !existing.isEmpty() )
+        {
+            return existing[0].Id;
+        }
+
+        Account employer = new Account ( Name = name );
+        Database.insert(employer, allowKnownDuplicates());
+
+        return employer.Id;
     }
 
     /** Campaign Member is the record of who actually turned up. */
@@ -549,6 +617,7 @@ public with sharing class BadgeScanService
                                            String result, String method, Id contactId, Id leadId )
     {
         Badge_Scan__c scan = new Badge_Scan__c (
+            Needs_Review__c = ambiguousMatch,
             Attendee__c   = attendeeId,
             Campaign__c   = campaignId,
             Badge_Id__c   = badgeId,
@@ -612,7 +681,9 @@ public with sharing class BadgeScanService
         outcome.leadId      = leadId;
         outcome.badgeScanId = scanId;
         outcome.checkedInAt = System.now();
-        outcome.message     = outcome.personName + ' is checked in.';
+        outcome.needsReview = ambiguousMatch;
+        outcome.message     = outcome.personName + ' is checked in.'
+                            + ( ambiguousMatch ? ' More than one contact matched - please review.' : '' );
 
         return outcome;
     }
@@ -673,6 +744,7 @@ public with sharing class BadgeScanService
         @AuraEnabled public Id      leadId      { get; set; }
         @AuraEnabled public Id      badgeScanId { get; set; }
         @AuraEnabled public Datetime checkedInAt { get; set; }
+        @AuraEnabled public Boolean  needsReview { get; set; }
 
         // Inner classes cannot hold static members, so the factories below live
         // on the outer class.
@@ -714,6 +786,7 @@ public with sharing class BadgeScanService
         @AuraEnabled public String   phone       { get; set; }
         @AuraEnabled public Boolean  checkedIn   { get; set; }
         @AuraEnabled public Datetime checkedInAt { get; set; }
+        @AuraEnabled public Boolean  needsReview { get; set; }
         @AuraEnabled public Id       contactId   { get; set; }
         @AuraEnabled public Id       leadId      { get; set; }
 

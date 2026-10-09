@@ -73,7 +73,17 @@ if (!sample.isEmpty()) {
     }
 }
 
-// 4. Badges to scan during the demo.
+// 4. The loaded guest list counts as invited, which is the first step of the
+//    funnel: Invited -> Registered -> Attended.
+List<Event_Attendee__c> notYetInvited = [
+    SELECT Id, Invited_At__c FROM Event_Attendee__c WHERE Invited_At__c = null
+];
+for (Event_Attendee__c attendee : notYetInvited) {
+    attendee.Invited_At__c = System.now();
+}
+update notYetInvited;
+
+// 5. Badges to scan during the demo.
 List<Event_Attendee__c> badges = [
     SELECT Badge_Id__c, First_Name__c, Last_Name__c, Company__c, Checked_In__c
     FROM Event_Attendee__c
@@ -89,6 +99,7 @@ for (Event_Registry__c registry : registries) {
         + ' checked in');
 }
 System.debug('  attended statuses added: ' + toAdd.size());
+System.debug('  invitations stamped:     ' + notYetInvited.size());
 System.debug('  pre-existing contact:    ' + seededContact);
 System.debug('  badges to scan:');
 for (Event_Attendee__c badge : badges) {

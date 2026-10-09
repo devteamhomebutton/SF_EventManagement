@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Invited_At__c</fullName>
+    <description>When the invitation went out. Set when the guest list is loaded, which is the first step of the funnel: Invited, Registered, Attended.</description>
+    <label>Invited At</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>DateTime</type>
+</CustomField>

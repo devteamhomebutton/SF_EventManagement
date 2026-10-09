@@ -227,6 +227,89 @@ private class BadgeScanServiceTest
             'No duplicate guest-list row should be created');
     }
 
+    // Use case 10: the person should land on a real Account, not float as a
+    // private Contact with no company behind them.
+    @IsTest
+    static void checkingInGivesThePersonAnAccount()
+    {
+        Event_Registry__c show = registry();
+
+        Test.startTest();
+        BadgeScanService.ScanResult outcome =
+            BadgeScanService.processScan(show.Id, BADGE_ONE, BadgeScanService.METHOD_CAMERA);
+        Test.stopTest();
+
+        Contact person = [ SELECT Id, AccountId, Account.Name FROM Contact WHERE Id = :outcome.contactId ];
+        Assert.isNotNull(person.AccountId, 'The Contact should be attached to an Account');
+        Assert.areEqual('Circuitry Labs', person.Account.Name, 'Named from the badge company');
+        Assert.areEqual(1, [ SELECT COUNT() FROM Account WHERE Name = 'Circuitry Labs' ],
+            'The Account should be created once, not per scan');
+    }
+
+    @IsTest
+    static void anExistingAccountIsReusedNotDuplicated()
+    {
+        insert new Account ( Name = 'Circuitry Labs' );
+
+        Event_Registry__c show = registry();
+
+        Test.startTest();
+        BadgeScanService.ScanResult outcome =
+            BadgeScanService.processScan(show.Id, BADGE_ONE, BadgeScanService.METHOD_CAMERA);
+        Test.stopTest();
+
+        Assert.areEqual(1, [ SELECT COUNT() FROM Account WHERE Name = 'Circuitry Labs' ],
+            'The existing company should be matched, not duplicated');
+        Assert.isNotNull([ SELECT AccountId FROM Contact WHERE Id = :outcome.contactId ].AccountId,
+            'And the person attached to it');
+    }
+
+    // Use case 9: two Contacts share the badge's phone number, so the match is
+    // ambiguous. The door still moves, but the scan is flagged.
+    @IsTest
+    static void anAmbiguousContactMatchIsFlaggedForReview()
+    {
+        insert new List<Contact>
+        {
+            new Contact ( LastName = 'Kumar',  MobilePhone = '9448968265' ),
+            new Contact ( LastName = 'Kumaar', MobilePhone = '9448968265' )
+        };
+
+        // Blank the email so matching has to fall through to the phone.
+        Event_Attendee__c attendee = attendee(BADGE_ONE);
+        update new Event_Attendee__c ( Id = attendee.Id, Email__c = null );
+
+        Event_Registry__c show = registry();
+
+        Test.startTest();
+        BadgeScanService.ScanResult outcome =
+            BadgeScanService.processScan(show.Id, BADGE_ONE, BadgeScanService.METHOD_CAMERA);
+        Test.stopTest();
+
+        Assert.isTrue(outcome.success, 'An ambiguous match must not block the queue');
+        Assert.isTrue(outcome.needsReview, 'But it should be reported as needing review');
+        Assert.isTrue(outcome.message.contains('review'), 'And say so on screen');
+
+        List <Badge_Scan__c> audit = [ SELECT Needs_Review__c FROM Badge_Scan__c ];
+        Assert.areEqual(1, audit.size(), 'One audit row as always');
+        Assert.isTrue(audit[0].Needs_Review__c, 'Flagged on the audit row so it can be found later');
+    }
+
+    @IsTest
+    static void aSingleCleanMatchIsNotFlagged()
+    {
+        Event_Registry__c show = registry();
+
+        Test.startTest();
+        BadgeScanService.ScanResult outcome =
+            BadgeScanService.processScan(show.Id, BADGE_ONE, BadgeScanService.METHOD_CAMERA);
+        Test.stopTest();
+
+        Assert.isFalse(outcome.needsReview, 'An unambiguous scan should not be flagged');
+        Assert.isFalse([ SELECT Needs_Review__c FROM Badge_Scan__c LIMIT 1 ].Needs_Review__c,
+            'Nor its audit row');
+    }
+
     @IsTest
     static void inactiveEventRefusesCheckIn()
     {

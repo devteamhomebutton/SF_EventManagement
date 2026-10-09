@@ -205,23 +205,26 @@ so walk-ups get a Lead, a Task and an audit row with zero duplicated logic.
 | `Campaign_Key__c` | Text(18), **unique**, external ID | Holds the Campaign Id. The unique index is what enforces "exactly one registry per campaign" — a database guarantee, not a validation rule that can be bypassed |
 | `Status__c` | Picklist | Planned / Active / Completed / Cancelled. Check-in is refused unless Active |
 | `Start_Date__c`, `End_Date__c` | Date | Event window |
-| `Total_Attendees__c` | **Roll-up** COUNT | Every child attendee row |
-| `Checked_In_Count__c` | **Roll-up** COUNT filtered `Checked_In__c = true` | Arrivals |
 
-Two roll-ups over the same child relationship differing only by filter. Roll-ups require
-master-detail, which is why the attendee relationship is master-detail and not a lookup.
+Attendance totals are **not** stored. They were roll-up summaries, but roll-ups require
+master-detail and that relationship had to become a lookup (see below), so
+`getEventSummary` counts with two `COUNT()` queries instead. Identical on screen, and it
+cannot drift. Restoring them as stored fields would mean a record-triggered Flow or an
+Apex trigger.
 
 ### `Event_Attendee__c` — the guest list
 
 | Field | Type | Purpose |
 |---|---|---|
 | `Name` | **AutoNumber** `ATT-{00000}` | Platform-generated; never set in code |
-| `Event_Registry__c` | **MasterDetail**, required | Parent. Enables the roll-ups |
+| `Event_Registry__c` | **Lookup**, required, `Restrict` delete | Parent. Was master-detail, but creating a master-detail child needs Edit on the master and a Site Guest licence can never hold Edit, which made public registration impossible |
 | `Badge_Id__c` | Text(80), **unique org-wide** | Human-readable badge reference. Unique across the *whole object*, not per event — this drives the walk-up and registration code generators |
 | `Badge_Token__c` | Text(32), unique, external ID | **The QR payload.** 128 bits from `Crypto.generateAesKey(128)` as hex. Replaced the guessable sequential `User 01`; `findAttendee` resolves either, so the originally printed badges still work |
 | `Attendee_Key__c` | Text(120), unique | `{registryId}\|{email}`. Stops one person being loaded twice for one event |
 | `First_Name__c` … `Title__c` | Text/Email/Phone | Badge details, copied to Contact and Lead on check-in |
-| `Checked_In__c` | Checkbox | The flag the roll-up filters on |
+| `Invited_At__c` | DateTime | Stamped when the guest list is loaded — step one of Invited → Registered → Attended |
+| `Registered_At__c` | DateTime | Stamped by public self-registration. Blank on a row that was only invited |
+| `Checked_In__c` | Checkbox | Arrived |
 | `Checked_In_At__c` | DateTime | When |
 | `Contact__c`, `Lead__c` | Lookups | Filled at check-in — the link from *expected* to *actual* |
 | `QR_Code__c` | **Formula** IMAGE | `IMAGE("/resource/Attendee_QR_Codes/" & SUBSTITUTE(Badge_Id__c," ","-") & ".png", …)` |
@@ -239,7 +242,8 @@ Set<String> variants = new Set<String>{ code, code.replace('-',' '), code.replac
 
 ### `Badge_Scan__c` — the audit log
 
-AutoNumber `BS-{00000}`. `Result__c` ∈ {Checked In, Already Checked In, Not Found, Error};
+AutoNumber `BS-{00000}`. `Needs_Review__c` flags a scan where more than one Contact matched.
+`Result__c` ∈ {Checked In, Already Checked In, Not Found, Error};
 `Scan_Method__c` ∈ {Camera Scan, Manual Check-in}; `Scanned_At__c`; nullable lookups to Attendee,
 Campaign, Contact and Lead — nullable because a failed scan may have none of them.
 
@@ -373,12 +377,22 @@ WHERE Email = :attendee.Email__c                       // exact; the field is ca
 WHERE MobilePhone LIKE :tail OR Phone LIKE :tail       // tail = '%' + last 9 digits
 ```
 
-Trailing digits, so `+91 94489 68265` still matches `9448968265`. `digitsOnly()` strips non-numerics
-first.
+Trailing digits, so `+91 94489 68265` still matches `9448968265`.
 
-**Known weakness — say it before you are asked:** a leading-wildcard `LIKE` is non-selective and
-will table-scan as Contact volume grows. Acceptable at 22 Contacts and one scan per call; the real
-fix is a normalised, indexed phone field.
+**Ambiguous matches (use case 9).** The query returns up to five matches rather than one. If
+more than one person fits, the **first is used and the scan is flagged** — `Needs_Review__c`
+on the audit row and `needsReview` on the result, which the scanner shows on screen. Blocking
+would stop the queue at a busy door; silently guessing would hide a data problem. Flagging does
+neither.
+
+**Account context (use case 10).** The person is attached to an Account matched by name from
+`Company__c`, created the first time that company is seen. An Account already on the Contact is
+never overwritten. Without this, every scan produced a private Contact floating with no company
+behind it.
+
+**Known weakness — say it before you are asked:** the phone match is a leading-wildcard `LIKE`,
+which is non-selective and will table-scan as Contact volume grows. Acceptable at this size; the
+real fix is a normalised, indexed phone field.
 
 ### 6.5 `ensureCampaignMember`
 
@@ -595,6 +609,65 @@ WHERE Event_Registry__c = :id AND ( Badge_Token__c = :code OR Badge_Id__c IN :va
 
 `scripts/apex/backfillTokens.apex` minted tokens for the 30 loaded rows.
 
+## 8A. Public self-registration
+
+`EventRegistrationService` + two Visualforce pages on a Salesforce Site, reachable with no login:
+
+```
+https://orgfarm-3be7c7306a-dev-ed.develop.my.salesforce-sites.com/event/EventRegister
+https://orgfarm-3be7c7306a-dev-ed.develop.my.salesforce-sites.com/event/EventBadge?t=<token>
+```
+
+**Why Visualforce and not LWC.** A Salesforce Site serves Visualforce. Experience Cloud would host
+LWC, but it has to be built by hand in Setup, whereas the Site and both pages deploy as metadata.
+The Apex layer is shared, so moving to Experience Cloud later is re-skinning, not a rebuild.
+
+**The QR, without a QR encoder in Apex.** Encoding QR properly means Reed–Solomon error correction
+over GF(256) — roughly 800 lines you cannot verify without physically scanning the output. Calling
+an external QR service would ship your badge tokens to a third party. Neither is necessary: the
+page renders the QR **in the browser** with the bundled MIT `qrcode-generator`, draws it to a
+canvas, and posts the PNG back for the email attachment. The attendee sees their badge before the
+email arrives. The posted image is validated for PNG magic bytes and size and is never trusted —
+the authoritative badge is always `Badge_Token__c`.
+
+### What a Site guest user can and cannot do
+
+This cost more time than anything else in the project, so it is worth stating plainly.
+
+1. **Guest users do not get Apex's system-mode CRUD bypass.** `without sharing` removes record
+   sharing as a concern but not object permissions. Proof: `/EventBadge` returned 200 while
+   `/EventBadge?t=abc` returned 401, and the only difference is that the second runs a query.
+2. **Guest profile permissions cannot be set through the Metadata API.** Page, class and object
+   grants each deployed "successfully" and were silently discarded. They must be set in Setup —
+   and retrieving a guest profile reports none of them even when they are live, so the only
+   reliable check is HTTP.
+3. **`FieldPermissions` records *are* writable through the API**, which is how FLS was granted.
+4. **A required lookup can never have FLS**, so a guest can never read it. Selecting `Campaign__c`
+   failed every query until it was removed.
+5. **A lookup to an object the guest cannot see is unreadable.** `Contact__c` had to go too.
+6. **Guests can never hold Edit or Delete** — the org says so: *"The user license doesn't allow the
+   permission: Edit Event_Registry__c"*. This is what forced master-detail to become a lookup.
+7. **Guests get no record access by default**, whatever the org-wide default says. Two
+   `SharingGuestRule`s grant Read on open events and on attendee rows carrying a token.
+
+Registration is therefore **a single insert** and nothing more. The guest needs Read on
+`Event_Registry__c` and Read + Create on `Event_Attendee__c`. The Contact, the Account, the
+Campaign Member and the Lead are all created at check-in by an internal user — which is also truer
+to the spec, since a Campaign Member records who showed up, not who said they would.
+
+### Deduplication
+
+Two layers, because one was not enough:
+
+- `Attendee_Key__c` = `{registryId}|{lowercased email}`, unique. Catches the same email in any case.
+- Surname **plus** the trailing nine digits of the mobile. Catches `gmail.com` versus `gamil.com`,
+  which a real tester hit. Surname is required too, or colleagues on a shared switchboard number
+  would be merged into one person.
+
+Either way a repeat registration **re-sends the existing badge** rather than issuing a second one.
+
+---
+
 ## 9. Permission set, scripts, tests
 
 **`Event_Check_In_User`** — Apex class access to `BadgeScanService`, object permissions on the three
@@ -692,3 +765,9 @@ registration to a single insert keeps that grant list to two objects.
 **"What would you fix first?"**
 Rate limiting on the public form. It is open to the internet with no captcha, which is fine for a
 short-lived demo org and not for production.
+
+**"Where did the roll-up summaries go?"**
+Public registration required the attendee relationship to become a lookup, and roll-ups only work
+on master-detail. The counts are computed in `getEventSummary` instead. Putting them back as
+stored fields is a record-triggered Flow — after-save to recount, before-delete to handle removal,
+and recount rather than increment so it cannot drift.

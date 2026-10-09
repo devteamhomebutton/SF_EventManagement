@@ -7,33 +7,6 @@
         <apexClass>BadgeScanService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
-    <objectPermissions>
-        <object>Event_Registry__c</object>
-        <allowRead>true</allowRead>
-        <allowCreate>true</allowCreate>
-        <allowEdit>false</allowEdit>
-        <allowDelete>false</allowDelete>
-        <viewAllRecords>false</viewAllRecords>
-        <modifyAllRecords>false</modifyAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <object>Event_Attendee__c</object>
-        <allowRead>true</allowRead>
-        <allowCreate>true</allowCreate>
-        <allowEdit>true</allowEdit>
-        <allowDelete>false</allowDelete>
-        <viewAllRecords>false</viewAllRecords>
-        <modifyAllRecords>false</modifyAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <object>Badge_Scan__c</object>
-        <allowRead>true</allowRead>
-        <allowCreate>true</allowCreate>
-        <allowEdit>false</allowEdit>
-        <allowDelete>false</allowDelete>
-        <viewAllRecords>false</viewAllRecords>
-        <modifyAllRecords>false</modifyAllRecords>
-    </objectPermissions>
     <fieldPermissions>
         <field>Badge_Scan__c.Attendee__c</field>
         <editable>true</editable>
@@ -56,6 +29,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <field>Badge_Scan__c.Lead__c</field>
+        <editable>true</editable>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Badge_Scan__c.Needs_Review__c</field>
         <editable>true</editable>
         <readable>true</readable>
     </fieldPermissions>
@@ -135,6 +113,11 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
+        <field>Event_Attendee__c.Invited_At__c</field>
+        <editable>true</editable>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
         <field>Event_Attendee__c.Last_Name__c</field>
         <editable>true</editable>
         <readable>true</readable>
@@ -152,6 +135,11 @@
     <fieldPermissions>
         <field>Event_Attendee__c.QR_Code__c</field>
         <editable>false</editable>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <field>Event_Attendee__c.Registered_At__c</field>
+        <editable>true</editable>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -199,6 +187,33 @@
         <editable>true</editable>
         <readable>true</readable>
     </fieldPermissions>
+    <objectPermissions>
+        <object>Event_Registry__c</object>
+        <allowRead>true</allowRead>
+        <allowCreate>true</allowCreate>
+        <allowEdit>false</allowEdit>
+        <allowDelete>false</allowDelete>
+        <viewAllRecords>false</viewAllRecords>
+        <modifyAllRecords>false</modifyAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Event_Attendee__c</object>
+        <allowRead>true</allowRead>
+        <allowCreate>true</allowCreate>
+        <allowEdit>true</allowEdit>
+        <allowDelete>false</allowDelete>
+        <viewAllRecords>false</viewAllRecords>
+        <modifyAllRecords>false</modifyAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Badge_Scan__c</object>
+        <allowRead>true</allowRead>
+        <allowCreate>true</allowCreate>
+        <allowEdit>false</allowEdit>
+        <allowDelete>false</allowDelete>
+        <viewAllRecords>false</viewAllRecords>
+        <modifyAllRecords>false</modifyAllRecords>
+    </objectPermissions>
     <tabSettings>
         <tab>Event_Registry__c</tab>
         <visibility>Visible</visibility>

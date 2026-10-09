@@ -117,6 +117,7 @@ public without sharing class EventRegistrationService
                 Phone__c          = details.phone,
                 Company__c        = details.company,
                 Title__c          = details.title,
+                Registered_At__c  = System.now(),
                 Checked_In__c     = false
             );
 

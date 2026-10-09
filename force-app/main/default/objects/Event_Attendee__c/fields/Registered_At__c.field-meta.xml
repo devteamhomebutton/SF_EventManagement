@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Registered_At__c</fullName>
+    <description>When the person registered themselves. Blank on a row that was only ever invited, which is what separates Invited from Registered.</description>
+    <label>Registered At</label>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>DateTime</type>
+</CustomField>
