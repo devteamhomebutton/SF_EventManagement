@@ -45,7 +45,7 @@ private class EventRegistrationServiceTest
     }
 
     @IsTest
-    static void registeringCreatesAttendeeContactAndMember()
+    static void registeringCreatesOnlyTheGuestListRow()
     {
         Event_Registry__c show = registry();
 
@@ -66,13 +66,14 @@ private class EventRegistrationServiceTest
         ];
         Assert.areEqual(NEW_EMAIL, attendee.Email__c, 'Email should be stored lower-cased');
         Assert.isFalse(attendee.Checked_In__c, 'Registering is not arriving');
-        Assert.isNotNull(attendee.Contact__c, 'The person should be resolved at registration');
         Assert.areEqual(show.Id + '|' + NEW_EMAIL, attendee.Attendee_Key__c, 'Key follows the loaded convention');
 
-        List <CampaignMember> members = [ SELECT Status FROM CampaignMember WHERE CampaignId = :show.Campaign__c ];
-        Assert.areEqual(1, members.size(), 'Registering should add a Campaign Member');
-        Assert.areEqual('Registered', members[0].Status, 'They have registered, not yet attended');
-
+        // Registration is one insert and nothing more, so that a Site guest user
+        // needs Create on this object alone.
+        Assert.isNull(attendee.Contact__c, 'Registering should not reach into Contact');
+        Assert.areEqual(0, [ SELECT COUNT() FROM Contact ], 'No Contact until they actually turn up');
+        Assert.areEqual(0, [ SELECT COUNT() FROM CampaignMember WHERE CampaignId = :show.Campaign__c ],
+            'A Campaign Member records who showed up, not who said they would');
         Assert.areEqual(0, [ SELECT COUNT() FROM Lead WHERE Event_Registry__c = :show.Id ],
             'No enquiry should be raised until they actually turn up');
     }

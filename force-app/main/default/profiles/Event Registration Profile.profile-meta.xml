@@ -23,6 +23,24 @@
         <apexClass>EventRegistrationService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <objectPermissions>
+        <object>Event_Registry__c</object>
+        <allowRead>true</allowRead>
+        <allowCreate>false</allowCreate>
+        <allowEdit>false</allowEdit>
+        <allowDelete>false</allowDelete>
+        <viewAllRecords>false</viewAllRecords>
+        <modifyAllRecords>false</modifyAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <object>Event_Attendee__c</object>
+        <allowRead>true</allowRead>
+        <allowCreate>true</allowCreate>
+        <allowEdit>false</allowEdit>
+        <allowDelete>false</allowDelete>
+        <viewAllRecords>false</viewAllRecords>
+        <modifyAllRecords>false</modifyAllRecords>
+    </objectPermissions>
     <pageAccesses>
         <apexPage>EventBadge</apexPage>
         <enabled>true</enabled>

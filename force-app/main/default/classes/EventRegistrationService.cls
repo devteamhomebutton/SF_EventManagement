@@ -2,10 +2,15 @@
  * Public self-registration for an event, and delivery of the QR badge.
  *
  * WHY `without sharing`: this is the gateway a Salesforce Site guest user calls.
- * Running in system context means the guest needs no object or record
- * permissions at all - only access to the page and to this class - so it can do
- * exactly what the methods below allow and nothing else. Every method therefore
- * validates its own inputs and scopes every query to a single record.
+ * It removes record-level sharing as a concern, but be clear that it does NOT
+ * remove object-level permissions: unlike ordinary Apex, a Site guest user gets
+ * no system-mode CRUD bypass, so every object touched here must be granted on
+ * the guest profile, and a guest can never be granted Edit or Delete.
+ *
+ * Registration is therefore deliberately a single insert. The guest needs Read
+ * on Event_Registry__c and Read + Create on Event_Attendee__c, and nothing
+ * else. Every method validates its own inputs and scopes each query to one
+ * record.
  *
  * The QR image itself is produced in the browser and posted back, so there is
  * no QR encoder in Apex and no call to an external service. That image is an
@@ -15,7 +20,6 @@
 public without sharing class EventRegistrationService
 {
     private static final String REGISTRY_ACTIVE  = 'Active';
-    private static final String STATUS_REGISTERED = 'Registered';
     private static final String REG_PREFIX       = 'REG-';
     private static final Integer ATTENDEE_KEY_MAX = 120;
     private static final Integer MAX_IMAGE_BYTES  = 500000;
@@ -62,9 +66,18 @@ public without sharing class EventRegistrationService
 
             if ( String.isBlank(existing.Badge_Token__c) )
             {
-                // Loaded guest-list rows predate tokens; mint one on first use.
-                existing.Badge_Token__c = BadgeScanService.newBadgeToken();
-                update existing;
+                // Loaded guest-list rows predate tokens. Minting one is an Edit,
+                // which a guest user can never be granted, so this only succeeds
+                // for internal callers. backfillTokens.apex covers the rest.
+                try
+                {
+                    existing.Badge_Token__c = BadgeScanService.newBadgeToken();
+                    update existing;
+                }
+                catch ( Exception e )
+                {
+                    return failure('Your badge could not be reissued. Please ask at the desk.');
+                }
             }
 
             RegistrationResult repeat = success(existing, registry);
@@ -92,15 +105,17 @@ public without sharing class EventRegistrationService
                 Checked_In__c     = false
             );
 
+            // Nothing but the guest-list row is created here. A Site guest user
+            // is NOT given the usual system-mode CRUD bypass, so every object it
+            // touches must be granted on the guest profile - and guest users can
+            // never be granted Edit, which rules out a follow-up update. Keeping
+            // registration to a single insert means the guest needs Read on the
+            // registry and Read+Create on the attendee, and nothing else.
+            //
+            // The Contact and the Campaign Member are resolved at check-in
+            // instead, which also matches the spec: a Campaign Member records
+            // who actually showed up, not who said they would.
             insert attendee;
-
-            // Resolve the person now, with the same matcher the scanner uses, so
-            // check-in later lands on this very Contact instead of a second copy.
-            Contact person = BadgeScanService.resolveContact(attendee);
-
-            registerAsMember(registry.Campaign__c, person.Id);
-
-            update new Event_Attendee__c ( Id = attendee.Id, Contact__c = person.Id );
 
             Event_Attendee__c saved =
                 [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Contact__c
@@ -142,12 +157,21 @@ public without sharing class EventRegistrationService
 
         if ( png != null )
         {
-            insert new ContentVersion (
-                Title                  = 'Badge ' + attendee.Badge_Id__c,
-                PathOnClient           = attendee.Badge_Id__c + '.png',
-                VersionData            = png,
-                FirstPublishLocationId = attendee.Id
-            );
+            // Best effort only. The email attachment does not depend on this,
+            // and a Site guest user has no rights over Files.
+            try
+            {
+                insert new ContentVersion (
+                    Title                  = 'Badge ' + attendee.Badge_Id__c,
+                    PathOnClient           = attendee.Badge_Id__c + '.png',
+                    VersionData            = png,
+                    FirstPublishLocationId = attendee.Id
+                );
+            }
+            catch ( Exception e )
+            {
+                // Carry on and still send the badge.
+            }
         }
 
         return sendBadgeEmail(attendee, png, badgeUrl);
@@ -209,41 +233,6 @@ public without sharing class EventRegistrationService
         return found.isEmpty() ? null : found[0];
     }
 
-    /**
-     * Registered, not Attended - the campaign already carries both, so the
-     * funnel reads Invited -> Registered -> Attended without any new fields.
-     */
-    private static void registerAsMember ( Id campaignId, Id contactId )
-    {
-        if ( campaignId == null )
-        {
-            return;
-        }
-
-        List <CampaignMember> existing =
-            [ SELECT Id FROM CampaignMember
-              WHERE CampaignId = :campaignId AND ContactId = :contactId LIMIT 1 ];
-
-        if ( !existing.isEmpty() )
-        {
-            return;
-        }
-
-        CampaignMember member = new CampaignMember ( CampaignId = campaignId, ContactId = contactId );
-
-        if ( hasStatus(campaignId, STATUS_REGISTERED) )
-        {
-            member.Status = STATUS_REGISTERED;
-        }
-
-        insert member;
-    }
-
-    private static Boolean hasStatus ( Id campaignId, String label )
-    {
-        return 0 < [ SELECT COUNT() FROM CampaignMemberStatus
-                     WHERE CampaignId = :campaignId AND Label = :label ];
-    }
 
     /** Rejects anything that is not a plausibly sized PNG. */
     private static Blob decodePng ( String base64Png )
@@ -289,6 +278,8 @@ public without sharing class EventRegistrationService
 
         if ( attendee.Contact__c != null )
         {
+            // Check-in has already resolved the person: targeting the record
+            // avoids Developer Edition's 15-a-day cap on external addresses.
             mail.setTargetObjectId(attendee.Contact__c);
             mail.setTreatTargetObjectAsRecipient(true);
         }
