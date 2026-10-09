@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StaticResource xmlns="http://soap.sforce.com/2006/04/metadata">
+    <cacheControl>Public</cacheControl>
+    <contentType>application/javascript</contentType>
+    <description>qrcode-generator 1.4.4 by Kazuhiko Arase, MIT licence. Renders QR codes in the browser so no QR encoder is needed in Apex and no external service is called.</description>
+</StaticResource>

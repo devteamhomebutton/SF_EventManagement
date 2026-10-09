@@ -1,0 +1,71 @@
+<apex:page controller="EventBadgeController"
+           showHeader="false" sidebar="false" standardStylesheets="false"
+           applyHtmlTag="true" applyBodyTag="false" docType="html-5.0"
+           title="My badge">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <apex:includeScript value="{!URLFOR($Resource.qrcodegen)}"/>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+               background:#f3f3f3; color:#181818; }
+        .wrap { max-width:420px; margin:0 auto; padding:24px 16px 48px; }
+        .card { background:#fff; border-radius:8px; padding:28px 24px; text-align:center;
+                box-shadow:0 2px 8px rgba(0,0,0,.08); }
+        .event { color:#747474; font-size:.85rem; text-transform:uppercase; letter-spacing:.06em; }
+        .name { font-size:1.5rem; font-weight:700; margin:6px 0 2px; }
+        .meta { color:#747474; font-size:.9rem; }
+        #qr { margin:24px 0 8px; }
+        #qr img { width:240px; height:240px; image-rendering:pixelated; }
+        .ref { font-family:monospace; font-size:.75rem; color:#999; }
+        .hint { margin-top:18px; font-size:.85rem; color:#747474; }
+        .state { margin-top:18px; padding:10px; border-radius:4px; font-size:.9rem; font-weight:600; }
+        .state.in { background:#ebf7ee; color:#2e844a; }
+        .missing { background:#fdeaed; border-left:4px solid #ea001e; padding:16px; border-radius:4px;
+                   text-align:left; font-size:.9rem; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card">
+
+        <apex:outputPanel rendered="{!NOT(found)}" layout="block">
+            <div class="missing">
+                <strong>Badge not found.</strong><br/>
+                This link is not valid. Check the link in your registration email, or register again.
+            </div>
+        </apex:outputPanel>
+
+        <apex:outputPanel rendered="{!found}" layout="block">
+            <div class="event">{!badge.eventName}</div>
+            <div class="name">{!badge.personName}</div>
+            <div class="meta">{!badge.title}</div>
+            <div class="meta">{!badge.company}</div>
+
+            <div id="qr"></div>
+            <div class="ref">{!badge.badgeId}</div>
+
+            <apex:outputPanel rendered="{!badge.checkedIn}" layout="block">
+                <div class="state in">Checked in</div>
+            </apex:outputPanel>
+
+            <apex:outputPanel rendered="{!NOT(badge.checkedIn)}" layout="block">
+                <div class="hint">Show this code at the door to check in.</div>
+            </apex:outputPanel>
+
+            <script>
+                // Rendered fresh in the browser each time, so there is no stored
+                // image to go stale and nothing fetched from outside the org.
+                (function () {
+                    var qr = qrcode(0, 'M');
+                    qr.addData('{!JSENCODE(badge.badgeToken)}');
+                    qr.make();
+                    document.getElementById('qr').innerHTML = qr.createImgTag(6, 8);
+                })();
+            </script>
+        </apex:outputPanel>
+
+    </div>
+</div>
+</body>
+</apex:page>

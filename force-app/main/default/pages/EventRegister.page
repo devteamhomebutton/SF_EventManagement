@@ -1,0 +1,176 @@
+<apex:page controller="EventRegisterController"
+           showHeader="false" sidebar="false" standardStylesheets="false"
+           applyHtmlTag="true" applyBodyTag="false" docType="html-5.0"
+           title="Register">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <apex:includeScript value="{!URLFOR($Resource.qrcodegen)}"/>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+               background:#f3f3f3; color:#181818; }
+        .wrap { max-width:460px; margin:0 auto; padding:24px 16px 48px; }
+        .card { background:#fff; border-radius:8px; padding:24px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+        h1 { font-size:1.4rem; margin:0 0 4px; }
+        .sub { color:#747474; font-size:.9rem; margin:0 0 20px; }
+        label { display:block; font-size:.8rem; font-weight:600; margin:14px 0 4px; }
+        input { width:100%; padding:10px 12px; border:1px solid #c9c9c9; border-radius:4px; font-size:1rem; }
+        input:focus { outline:2px solid #0176d3; border-color:#0176d3; }
+        button { width:100%; margin-top:20px; padding:12px; background:#0176d3; color:#fff; border:0;
+                 border-radius:4px; font-size:1rem; font-weight:600; cursor:pointer; }
+        button:disabled { background:#aacbea; cursor:default; }
+        .req { color:#ea001e; }
+        .msg { padding:12px; border-radius:4px; margin-bottom:16px; font-size:.9rem; }
+        .msg.error { background:#fdeaed; border-left:4px solid #ea001e; }
+        .msg.ok { background:#ebf7ee; border-left:4px solid #2e844a; }
+        .badge { text-align:center; }
+        .badge img { width:220px; height:220px; image-rendering:pixelated; }
+        .badge .name { font-size:1.2rem; font-weight:700; margin-top:12px; }
+        .badge .meta { color:#747474; font-size:.85rem; }
+        .ref { font-family:monospace; font-size:.75rem; color:#999; margin-top:12px; word-break:break-all; }
+        .hide { display:none; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+
+    <!-- Registration form -->
+    <div class="card" id="formCard">
+        <h1>Register for {!eventName}</h1>
+        <p class="sub">We will email your QR badge. Show it at the door to check in.</p>
+
+        <apex:outputPanel rendered="{!NOT(eventOpen)}">
+            <div class="msg error">Registration for this event is not open.</div>
+        </apex:outputPanel>
+
+        <apex:outputPanel rendered="{!eventOpen}" layout="block">
+            <div id="formError" class="msg error hide"></div>
+
+            <label>First name</label>
+            <input type="text" id="firstName" autocomplete="given-name"/>
+
+            <label>Last name <span class="req">*</span></label>
+            <input type="text" id="lastName" autocomplete="family-name"/>
+
+            <label>Email <span class="req">*</span></label>
+            <input type="email" id="email" autocomplete="email"/>
+
+            <label>Mobile</label>
+            <input type="tel" id="phone" autocomplete="tel"/>
+
+            <label>Company</label>
+            <input type="text" id="company" autocomplete="organization"/>
+
+            <label>Job title</label>
+            <input type="text" id="title" autocomplete="organization-title"/>
+
+            <button id="submitBtn" onclick="doRegister(); return false;">Register</button>
+        </apex:outputPanel>
+    </div>
+
+    <!-- Badge, shown in place of the form once registered -->
+    <div class="card badge hide" id="badgeCard">
+        <div class="msg ok" id="badgeMsg"></div>
+        <div id="qr"></div>
+        <div class="name" id="badgeName"></div>
+        <div class="meta" id="badgeEvent"></div>
+        <div class="ref" id="badgeRef"></div>
+        <div class="meta" id="emailStatus" style="margin-top:14px"></div>
+    </div>
+
+</div>
+
+<script>
+    var REGISTRY_ID = '{!eventRegistryId}';
+
+    function val(id) { return (document.getElementById(id).value || '').trim(); }
+
+    function showError(text) {
+        var box = document.getElementById('formError');
+        box.textContent = text;
+        box.classList.remove('hide');
+    }
+
+    function doRegister() {
+        var lastName = val('lastName');
+        var email    = val('email');
+
+        if (!lastName) { showError('Please give us a last name.'); return; }
+        if (!email || email.indexOf('@') < 0) { showError('Please give us a valid email address.'); return; }
+
+        var btn = document.getElementById('submitBtn');
+        btn.disabled = true;
+        btn.textContent = 'Registering…';
+
+        Visualforce.remoting.Manager.invokeAction(
+            '{!$RemoteAction.EventRegisterController.register}',
+            REGISTRY_ID, val('firstName'), lastName, email, val('phone'), val('company'), val('title'),
+            function (result, event) {
+                if (!event.status || !result || !result.success) {
+                    showError((result && result.message) || (event && event.message) || 'Registration failed.');
+                    btn.disabled = false;
+                    btn.textContent = 'Register';
+                    return;
+                }
+                showBadge(result);
+            },
+            { escape: false }
+        );
+    }
+
+    function showBadge(result) {
+        document.getElementById('formCard').classList.add('hide');
+        document.getElementById('badgeCard').classList.remove('hide');
+        document.getElementById('badgeMsg').textContent  = result.message;
+        document.getElementById('badgeName').textContent = result.personName;
+        document.getElementById('badgeEvent').textContent = result.eventName;
+        document.getElementById('badgeRef').textContent  = result.badgeId;
+
+        // Render the QR in the browser. No QR encoder in Apex, no external service.
+        var qr = qrcode(0, 'M');
+        qr.addData(result.badgeToken);
+        qr.make();
+        document.getElementById('qr').innerHTML = qr.createImgTag(6, 8);
+
+        // createDataURL emits a GIF, so draw to a canvas to get a real PNG for
+        // the email attachment.
+        toPng(qr, function (base64) {
+            var badgeUrl = window.location.origin + window.location.pathname.replace(/EventRegister$/i, 'EventBadge')
+                         + '?t=' + encodeURIComponent(result.badgeToken);
+
+            Visualforce.remoting.Manager.invokeAction(
+                '{!$RemoteAction.EventRegisterController.attachBadge}',
+                result.attendeeId, base64, badgeUrl,
+                function (status, event) {
+                    document.getElementById('emailStatus').textContent =
+                        event.status ? status : 'Registered, but the badge email could not be sent.';
+                },
+                { escape: false }
+            );
+        });
+    }
+
+    function toPng(qr, done) {
+        var count = qr.getModuleCount(), cell = 8, margin = 4;
+        var size  = count * cell + margin * 2;
+        var canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+
+        var ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.fillStyle = '#000000';
+
+        for (var r = 0; r < count; r++) {
+            for (var c = 0; c < count; c++) {
+                if (qr.isDark(r, c)) {
+                    ctx.fillRect(margin + c * cell, margin + r * cell, cell, cell);
+                }
+            }
+        }
+
+        try { done(canvas.toDataURL('image/png')); } catch (e) { done(null); }
+    }
+</script>
+</body>
+</apex:page>

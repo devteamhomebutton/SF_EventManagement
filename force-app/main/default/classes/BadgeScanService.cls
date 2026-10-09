@@ -277,15 +277,25 @@ public with sharing class BadgeScanService
     {
         Set <String> variants = new Set<String> { code, code.replace('-', ' '), code.replace(' ', '-') };
 
+        // Registered attendees carry an unguessable Badge_Token__c in their QR;
+        // the originally printed badges only have a Badge_Id__c. One query
+        // resolves either, so both generations of badge keep working.
         List <Event_Attendee__c> found =
-            [ SELECT Id, Name, Badge_Id__c, First_Name__c, Last_Name__c, Email__c, Phone__c,
-                     Company__c, Title__c, Checked_In__c, Checked_In_At__c, Contact__c, Lead__c,
-                     Event_Name__c, Event_Registry__c
+            [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Email__c,
+                     Phone__c, Company__c, Title__c, Checked_In__c, Checked_In_At__c, Contact__c,
+                     Lead__c, Event_Name__c, Event_Registry__c
               FROM Event_Attendee__c
-              WHERE Event_Registry__c = :eventRegistryId AND Badge_Id__c IN :variants
+              WHERE Event_Registry__c = :eventRegistryId
+                AND ( Badge_Token__c = :code OR Badge_Id__c IN :variants )
               LIMIT 1 ];
 
         return found.isEmpty() ? null : found[0];
+    }
+
+    /** 128 bits of randomness as 32 hex characters. */
+    public static String newBadgeToken ()
+    {
+        return EncodingUtil.convertToHex(Crypto.generateAesKey(128));
     }
 
     private static Event_Attendee__c findAttendeeByEmail ( Id eventRegistryId, String email )
@@ -325,6 +335,7 @@ public with sharing class BadgeScanService
             Event_Attendee__c walkUp = new Event_Attendee__c (
                 Event_Registry__c = registry.Id,
                 Badge_Id__c       = badgeCode,
+                Badge_Token__c    = newBadgeToken(),
                 Attendee_Key__c   = attendeeKey(registry.Id, details.email, badgeCode),
                 First_Name__c     = details.firstName,
                 Last_Name__c      = details.lastName,
@@ -366,8 +377,12 @@ public with sharing class BadgeScanService
         return ( String.valueOf(eventRegistryId).left(18) + '|' + tail ).left(ATTENDEE_KEY_MAX);
     }
 
-    /** Email first, then mobile number, then create. Never a second copy. */
-    private static Contact resolveContact ( Event_Attendee__c attendee )
+    /**
+     * Email first, then mobile number, then create. Never a second copy.
+     * Public because EventRegistrationService resolves the same person at
+     * registration time and must land on the identical Contact.
+     */
+    public static Contact resolveContact ( Event_Attendee__c attendee )
     {
         if ( String.isNotBlank(attendee.Email__c) )
         {

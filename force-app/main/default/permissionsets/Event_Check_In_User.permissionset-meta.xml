@@ -95,6 +95,11 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
+        <field>Event_Attendee__c.Badge_Token__c</field>
+        <editable>true</editable>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
         <field>Event_Attendee__c.Checked_In_At__c</field>
         <editable>true</editable>
         <readable>true</readable>

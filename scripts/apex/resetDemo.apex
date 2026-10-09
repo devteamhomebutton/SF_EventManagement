@@ -43,14 +43,29 @@ for (Event_Attendee__c attendee : everyone) {
         guestEmails.add(attendee.Email__c);
     }
 
-    if (attendee.Badge_Id__c != null && attendee.Badge_Id__c.startsWith('WALK-')) {
+    // Walk-ups and public registrations are both created on the day, so both go.
+    if (attendee.Badge_Id__c != null
+        && (attendee.Badge_Id__c.startsWith('WALK-') || attendee.Badge_Id__c.startsWith('REG-'))) {
         walkUps.add(attendee);
     } else {
         guestList.add(attendee);
     }
 }
 
-// 5. Walk-ups added on the day.
+// 5. Walk-ups and registrations added on the day, with their badge files.
+Set<Id> addedIds = new Map<Id, Event_Attendee__c>(walkUps).keySet();
+Set<Id> badgeDocIds = new Set<Id>();
+
+// ContentDocumentLink refuses to be queried with an empty IN list.
+if (!addedIds.isEmpty()) {
+    for (ContentDocumentLink link :
+         [SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId IN :addedIds]) {
+        badgeDocIds.add(link.ContentDocumentId);
+    }
+}
+if (!badgeDocIds.isEmpty()) {
+    delete [SELECT Id FROM ContentDocument WHERE Id IN :badgeDocIds];
+}
 delete walkUps;
 
 // 6. Clear the check-in flags on the loaded guest list.
@@ -77,7 +92,8 @@ System.debug('Reset complete.');
 System.debug('  badge scans deleted:      ' + scans.size());
 System.debug('  enquiries deleted:        ' + enquiries.size());
 System.debug('  campaign members deleted: ' + members.size());
-System.debug('  walk-ups deleted:         ' + walkUps.size());
+System.debug('  walk-ups/registrations:   ' + walkUps.size());
+System.debug('  badge files deleted:      ' + badgeDocIds.size());
 System.debug('  guest list cleared:       ' + guestList.size());
 System.debug('  contacts deleted:         ' + created.size());
 System.debug('  events set to Active:     ' + registries.size());

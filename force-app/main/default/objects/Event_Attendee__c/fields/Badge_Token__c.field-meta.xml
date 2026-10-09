@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Badge_Token__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>Unguessable 128-bit value encoded in the QR badge. Replaces the sequential Badge Id as the scan payload; Badge Id still resolves so the originally printed badges keep working.</description>
+    <externalId>true</externalId>
+    <label>Badge Token</label>
+    <length>32</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>
