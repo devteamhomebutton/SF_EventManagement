@@ -193,7 +193,7 @@ public with sharing class BadgeScanService
     {
         List <Event_Registry__c> found =
             [ SELECT Id, Name, Status__c, Start_Date__c, End_Date__c,
-                     Total_Attendees__c, Checked_In_Count__c, Campaign__c, Campaign__r.Name
+                     Campaign__c, Campaign__r.Name
               FROM Event_Registry__c WHERE Id = :eventRegistryId LIMIT 1 ];
 
         EventSummary summary = new EventSummary();
@@ -218,9 +218,15 @@ public with sharing class BadgeScanService
         summary.status          = registry.Status__c;
         summary.startDate       = registry.Start_Date__c;
         summary.endDate         = registry.End_Date__c;
-        summary.totalAttendees  = (Integer) registry.Total_Attendees__c;
-        summary.checkedIn       = (Integer) registry.Checked_In_Count__c;
-        summary.notCheckedIn    = summary.totalAttendees - summary.checkedIn;
+        // Counted rather than rolled up. The attendee relationship had to become
+        // a lookup so that a Site guest user could register - creating a
+        // master-detail child needs Edit on the master, which a Guest licence
+        // can never hold - and roll-up summaries require master-detail.
+        summary.totalAttendees = [ SELECT COUNT() FROM Event_Attendee__c
+                                   WHERE Event_Registry__c = :eventRegistryId ];
+        summary.checkedIn      = [ SELECT COUNT() FROM Event_Attendee__c
+                                   WHERE Event_Registry__c = :eventRegistryId AND Checked_In__c = true ];
+        summary.notCheckedIn   = summary.totalAttendees - summary.checkedIn;
 
         return summary;
     }

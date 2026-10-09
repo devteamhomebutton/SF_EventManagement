@@ -41,16 +41,8 @@
         <editHeading>true</editHeading>
         <label>Attendance</label>
         <layoutColumns>
-            <layoutItems>
-                <behavior>Readonly</behavior>
-                <field>Total_Attendees__c</field>
-            </layoutItems>
         </layoutColumns>
         <layoutColumns>
-            <layoutItems>
-                <behavior>Readonly</behavior>
-                <field>Checked_In_Count__c</field>
-            </layoutItems>
             <layoutItems>
                 <behavior>Readonly</behavior>
                 <field>Campaign_Key__c</field>

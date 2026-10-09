@@ -10,7 +10,7 @@
 
 // 1. The event has to be Active or every scan is refused by design.
 List<Event_Registry__c> registries = [
-    SELECT Id, Name, Status__c, Campaign__c, Total_Attendees__c, Checked_In_Count__c
+    SELECT Id, Name, Status__c, Campaign__c
     FROM Event_Registry__c
 ];
 for (Event_Registry__c registry : registries) {
@@ -84,7 +84,9 @@ List<Event_Attendee__c> badges = [
 System.debug('Seed complete.');
 for (Event_Registry__c registry : registries) {
     System.debug('  event: ' + registry.Name + ' [' + registry.Id + '] status Active, '
-        + registry.Total_Attendees__c + ' attendees, ' + registry.Checked_In_Count__c + ' checked in');
+        + [SELECT COUNT() FROM Event_Attendee__c WHERE Event_Registry__c = :registry.Id] + ' attendees, '
+        + [SELECT COUNT() FROM Event_Attendee__c WHERE Event_Registry__c = :registry.Id AND Checked_In__c = true]
+        + ' checked in');
 }
 System.debug('  attended statuses added: ' + toAdd.size());
 System.debug('  pre-existing contact:    ' + seededContact);

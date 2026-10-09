@@ -117,11 +117,10 @@ public without sharing class EventRegistrationService
             // who actually showed up, not who said they would.
             insert attendee;
 
-            Event_Attendee__c saved =
-                [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c
-                  FROM Event_Attendee__c WHERE Id = :attendee.Id LIMIT 1 ];
-
-            return success(saved, registry);
+            // Deliberately no re-query. Everything the result needs is already
+            // on the in-memory record, and a guest user cannot necessarily read
+            // back a row it has just created.
+            return success(attendee, registry);
         }
         catch ( Exception e )
         {

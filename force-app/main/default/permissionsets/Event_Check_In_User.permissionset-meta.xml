@@ -165,11 +165,6 @@
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
-        <field>Event_Registry__c.Checked_In_Count__c</field>
-        <editable>false</editable>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
         <field>Event_Registry__c.End_Date__c</field>
         <editable>true</editable>
         <readable>true</readable>
@@ -182,11 +177,6 @@
     <fieldPermissions>
         <field>Event_Registry__c.Status__c</field>
         <editable>true</editable>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <field>Event_Registry__c.Total_Attendees__c</field>
-        <editable>false</editable>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
