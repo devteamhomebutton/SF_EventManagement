@@ -57,7 +57,7 @@ public without sharing class EventRegistrationService
         // Registering twice re-sends the badge rather than adding a second row;
         // Attendee_Key__c is unique and would reject the insert anyway.
         List <Event_Attendee__c> already =
-            [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Contact__c
+            [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c
               FROM Event_Attendee__c WHERE Attendee_Key__c = :key LIMIT 1 ];
 
         if ( !already.isEmpty() )
@@ -118,7 +118,7 @@ public without sharing class EventRegistrationService
             insert attendee;
 
             Event_Attendee__c saved =
-                [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Contact__c
+                [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c
                   FROM Event_Attendee__c WHERE Id = :attendee.Id LIMIT 1 ];
 
             return success(saved, registry);
@@ -144,7 +144,7 @@ public without sharing class EventRegistrationService
 
         List <Event_Attendee__c> rows =
             [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Email__c,
-                     Contact__c, Event_Name__c
+                     Event_Name__c
               FROM Event_Attendee__c WHERE Id = :attendeeId LIMIT 1 ];
 
         if ( rows.isEmpty() )
@@ -214,19 +214,27 @@ public without sharing class EventRegistrationService
 
     // -------------------------------------------------------------- helpers
 
-    /** With no event supplied, fall back to the one that is open. */
+    /**
+     * With no event supplied, fall back to the one that is open.
+     *
+     * Campaign__c is deliberately NOT selected. It is a required lookup, which
+     * means it cannot be given field-level security, so a Site guest user can
+     * never read it - selecting it makes the whole query fail for guests.
+     * Registration does not need it, because the Campaign Member is created at
+     * check-in rather than here.
+     */
     private static Event_Registry__c resolveRegistry ( Id eventRegistryId )
     {
         List <Event_Registry__c> found;
 
         if ( eventRegistryId == null )
         {
-            found = [ SELECT Id, Name, Status__c, Campaign__c FROM Event_Registry__c
+            found = [ SELECT Id, Name, Status__c FROM Event_Registry__c
                       WHERE Status__c = :REGISTRY_ACTIVE ORDER BY Start_Date__c LIMIT 1 ];
         }
         else
         {
-            found = [ SELECT Id, Name, Status__c, Campaign__c FROM Event_Registry__c
+            found = [ SELECT Id, Name, Status__c FROM Event_Registry__c
                       WHERE Id = :eventRegistryId LIMIT 1 ];
         }
 
@@ -276,21 +284,17 @@ public without sharing class EventRegistrationService
     {
         Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
 
-        if ( attendee.Contact__c != null )
-        {
-            // Check-in has already resolved the person: targeting the record
-            // avoids Developer Edition's 15-a-day cap on external addresses.
-            mail.setTargetObjectId(attendee.Contact__c);
-            mail.setTreatTargetObjectAsRecipient(true);
-        }
-        else if ( String.isNotBlank(attendee.Email__c) )
-        {
-            mail.setToAddresses(new List<String> { attendee.Email__c });
-        }
-        else
+        // Contact__c is a lookup to Contact, and a Site guest user has no access
+        // to Contact, which makes the whole field unreadable for them. It is not
+        // selected at all, so the badge always goes to the address given on the
+        // form. That does count against Developer Edition's cap of 15 external
+        // emails a day, which is worth remembering during rehearsals.
+        if ( String.isBlank(attendee.Email__c) )
         {
             return 'Registered, but there was no address to send the badge to.';
         }
+
+        mail.setToAddresses(new List<String> { attendee.Email__c });
 
         mail.setSaveAsActivity(false);
         mail.setSubject('Your badge for ' + attendee.Event_Name__c);

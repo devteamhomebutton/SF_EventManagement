@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Guest users are forced to Private record access regardless of the object's
+    org-wide default, and `without sharing` does not override that for them.
+    Without this rule the public registration page cannot read the event it is
+    registering people for. Read only, and only for events that are open.
+-->
+<SharingRules xmlns="http://soap.sforce.com/2006/04/metadata">
+    <sharingGuestRules>
+        <fullName>Event_Registry_Guest_Read</fullName>
+        <accessLevel>Read</accessLevel>
+        <label>Event Registry Guest Read</label>
+        <sharedTo>
+            <guestUser>Event_Registration</guestUser>
+        </sharedTo>
+        <criteriaItems>
+            <field>Status__c</field>
+            <operation>equals</operation>
+            <value>Active</value>
+        </criteriaItems>
+    </sharingGuestRules>
+</SharingRules>

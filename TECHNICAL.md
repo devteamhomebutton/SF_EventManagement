@@ -217,7 +217,8 @@ master-detail, which is why the attendee relationship is master-detail and not a
 |---|---|---|
 | `Name` | **AutoNumber** `ATT-{00000}` | Platform-generated; never set in code |
 | `Event_Registry__c` | **MasterDetail**, required | Parent. Enables the roll-ups |
-| `Badge_Id__c` | Text(80), **unique org-wide** | The code in the QR. Unique across the *whole object*, not per event — this drives the walk-up generator |
+| `Badge_Id__c` | Text(80), **unique org-wide** | Human-readable badge reference. Unique across the *whole object*, not per event — this drives the walk-up and registration code generators |
+| `Badge_Token__c` | Text(32), unique, external ID | **The QR payload.** 128 bits from `Crypto.generateAesKey(128)` as hex. Replaced the guessable sequential `User 01`; `findAttendee` resolves either, so the originally printed badges still work |
 | `Attendee_Key__c` | Text(120), unique | `{registryId}\|{email}`. Stops one person being loaded twice for one event |
 | `First_Name__c` … `Title__c` | Text/Email/Phone | Badge details, copied to Contact and Lead on check-in |
 | `Checked_In__c` | Checkbox | The flag the roll-up filters on |
@@ -579,16 +580,20 @@ environment where its camera scanner can run:
 This is **separate from** the page assignment form factor set in the object's `actionOverrides`.
 Both are required; we initially had only the latter.
 
-### 8.5 What the QR currently contains, and why that needs changing
+### 8.5 What the QR contains
 
-Today the QR encodes `Badge_Id__c` — `User 01`, `User 02`, … Sequential and therefore guessable:
-anyone could type `User 07` and check in as someone else.
+`Badge_Token__c` — 32 hex characters, 128 bits of randomness. The earlier design encoded
+`Badge_Id__c` (`User 01`, `User 02`, …), which was sequential and therefore guessable: anyone could
+type `User 07` and check in as someone else.
 
-The fix is a `Badge_Token__c` holding a 128-bit random value, encoded in the QR instead, with
-`findAttendee` falling back to `Badge_Id__c` so the existing 30 printed badges keep working. Not
-built — it is the first thing on the list after the MVP.
+`findAttendee` resolves **either** form in one query, so the 30 originally printed badges still
+scan while everything issued since carries a token:
 
----
+```apex
+WHERE Event_Registry__c = :id AND ( Badge_Token__c = :code OR Badge_Id__c IN :variants )
+```
+
+`scripts/apex/backfillTokens.apex` minted tokens for the 30 loaded rows.
 
 ## 9. Permission set, scripts, tests
 
@@ -679,5 +684,11 @@ Badge printing, public self-registration, digital badges via a Salesforce Site, 
 AAMVA licence parsing, platform events for multi-desk refresh, offline queueing. Deliberate MVP
 scope cuts, not oversights.
 
+**"Why does the public form create so little?"**
+Because a Site guest user does not get Apex's usual system-mode CRUD bypass — see §12.4. Every
+object it touches must be granted on the guest profile, and guests can never hold Edit. Keeping
+registration to a single insert keeps that grant list to two objects.
+
 **"What would you fix first?"**
-The guessable badge code — see §8.5.
+Rate limiting on the public form. It is open to the internet with no captcha, which is fine for a
+short-lived demo org and not for production.
