@@ -97,6 +97,47 @@ private class EventRegistrationServiceTest
             'Registering twice must not create a second guest-list row');
     }
 
+    // A mistyped email looks like a different person unless something else
+    // matches. Surname plus mobile is the second line of defence.
+    @IsTest
+    static void aMistypedEmailStillFindsTheSamePerson()
+    {
+        Event_Registry__c show = registry();
+
+        BadgeScanService.WalkUpRequest first = details('muthu.test@gmail.com');
+        first.lastName = 'Chinnachamy';
+        first.phone    = '9876501234';
+
+        BadgeScanService.WalkUpRequest typo = details('muthu.test@gamil.com');
+        typo.lastName  = 'Chinnachamy';
+        typo.phone     = '9876501234';
+
+        BadgeScanService.WalkUpRequest formatted = details('yet.another@gmail.com');
+        formatted.lastName = 'Chinnachamy';
+        formatted.phone    = '+91 98765 01234';
+
+        BadgeScanService.WalkUpRequest someoneElse = details('other@gmail.com');
+        someoneElse.lastName = 'Different';
+        someoneElse.phone    = '9000000001';
+
+        Test.startTest();
+        EventRegistrationService.RegistrationResult a = EventRegistrationService.register(show.Id, first);
+        EventRegistrationService.RegistrationResult b = EventRegistrationService.register(show.Id, typo);
+        EventRegistrationService.RegistrationResult c = EventRegistrationService.register(show.Id, formatted);
+        EventRegistrationService.RegistrationResult d = EventRegistrationService.register(show.Id, someoneElse);
+        Test.stopTest();
+
+        Assert.isFalse(a.alreadyRegistered, 'The first registration is new');
+        Assert.isTrue(b.alreadyRegistered, 'A mistyped email should still match on surname and mobile');
+        Assert.areEqual(a.badgeId, b.badgeId, 'And hand back the original badge');
+        Assert.isTrue(c.alreadyRegistered, 'Formatting and a country code must not defeat the match');
+        Assert.areEqual(a.badgeId, c.badgeId, 'Same badge again');
+        Assert.isFalse(d.alreadyRegistered, 'A genuinely different person still gets their own badge');
+
+        Assert.areEqual(2, [ SELECT COUNT() FROM Event_Attendee__c WHERE Event_Registry__c = :show.Id ],
+            'Two real people, not four rows');
+    }
+
     @IsTest
     static void registrationIsRejectedWithoutNameOrEmail()
     {

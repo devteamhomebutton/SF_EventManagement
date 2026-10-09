@@ -87,6 +87,21 @@ public without sharing class EventRegistrationService
             return repeat;
         }
 
+        // A mistyped email looks like a different person, so fall back to the
+        // same last name plus the same mobile number at the same event. This is
+        // what catches someone registering twice as gmail.com and gamil.com.
+        Event_Attendee__c samePerson = findBySurnameAndPhone(registry.Id, details.lastName, details.phone);
+
+        if ( samePerson != null )
+        {
+            RegistrationResult repeat = success(samePerson, registry);
+            repeat.alreadyRegistered = true;
+            repeat.message = 'You are already registered under ' + samePerson.Email__c
+                           + '. Here is that badge again.';
+
+            return repeat;
+        }
+
         Savepoint sp = Database.setSavepoint();
 
         try
@@ -212,6 +227,36 @@ public without sharing class EventRegistrationService
     }
 
     // -------------------------------------------------------------- helpers
+
+    /**
+     * Second line of defence against the same person registering twice. Matches
+     * on surname plus the trailing digits of the mobile, so a different country
+     * code or formatting still counts as the same number. Surname is required
+     * too, because a shared switchboard number would otherwise merge colleagues.
+     */
+    private static Event_Attendee__c findBySurnameAndPhone ( Id eventRegistryId, String lastName, String phone )
+    {
+        String digits = String.isBlank(phone) ? null : phone.replaceAll('[^0-9]', '');
+
+        if ( String.isBlank(lastName) || digits == null || digits.length() < 7 )
+        {
+            return null;
+        }
+
+        String tail    = '%' + digits.right(9);
+        String surname = lastName.trim();
+
+        List <Event_Attendee__c> found =
+            [ SELECT Id, Name, Badge_Id__c, Badge_Token__c, First_Name__c, Last_Name__c, Email__c
+              FROM Event_Attendee__c
+              WHERE Event_Registry__c = :eventRegistryId
+                AND Last_Name__c = :surname
+                AND Phone__c LIKE :tail
+              LIMIT 1 ];
+
+        return found.isEmpty() ? null : found[0];
+    }
+
 
     /**
      * With no event supplied, fall back to the one that is open.
